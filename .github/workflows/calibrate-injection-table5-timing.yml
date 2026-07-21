@@ -1,0 +1,77 @@
+name: Calibrate injection-seismicity Table 5 timing
+
+on:
+  pull_request:
+    paths:
+      - 'table5-calibration/**'
+      - '.github/workflows/calibrate-injection-table5-timing.yml'
+  workflow_dispatch:
+
+jobs:
+  calibrate:
+    name: ${{ matrix.variant }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      max-parallel: 9
+      matrix:
+        variant:
+          - paper_q125
+          - paper_q135
+          - paper_q150
+          - paper_q175
+          - source5203_q100
+          - source5303_q100
+          - source5303_q125
+          - source5303_q150
+          - mid5303_q100
+
+    steps:
+      - name: Checkout calibration harness
+        uses: actions/checkout@v4
+
+      - name: Checkout author's first public MATLAB archive
+        uses: actions/checkout@v4
+        with:
+          repository: MohammadSabah93/XFEM-Injection-Induced-Seismicity
+          ref: 8f7b13737863100031ccd8f26e18ce92538d11a0
+          path: author
+
+      - name: Set up MATLAB R2022b
+        uses: matlab-actions/setup-matlab@v3
+        with:
+          release: R2022b
+          cache: true
+
+      - name: Prepare calibration variant
+        run: |
+          python table5-reproduction/prepare_case.py --author-dir author --output-dir "work/${{ matrix.variant }}"
+          python table5-calibration/apply_variant.py --case-dir "work/${{ matrix.variant }}" --variant "${{ matrix.variant }}"
+
+      - name: Run author model in licensed MATLAB
+        uses: matlab-actions/run-command@v3
+        with:
+          command: workspace=getenv('GITHUB_WORKSPACE'); cd(fullfile(workspace,'work','${{ matrix.variant }}')); run_table5_ci
+
+      - name: Score against published Table 5
+        if: always()
+        run: python table5-calibration/score_variant.py --case-dir "work/${{ matrix.variant }}"
+
+      - name: Upload calibration evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: table5-calibration-${{ matrix.variant }}
+          if-no-files-found: warn
+          retention-days: 30
+          path: |
+            work/${{ matrix.variant }}/VARIANT.json
+            work/${{ matrix.variant }}/CALIBRATION_SCORE.json
+            work/${{ matrix.variant }}/Table5_reproduced.csv
+            work/${{ matrix.variant }}/Table5_results.mat
+            work/${{ matrix.variant }}/Table5_state_compact.mat
+            work/${{ matrix.variant }}/Table5_checkpoint.mat
+            work/${{ matrix.variant }}/REPRODUCTION_PATCH.txt
+            work/${{ matrix.variant }}/run.log
+            work/${{ matrix.variant }}/run_error.txt
