@@ -43,7 +43,7 @@ jobs:
         if: always()
         run: |
           if [ -f work/Table5_prebalance_reset/Table5_reproduced.csv ]; then
-            python table5-reproduction/verify_results.py --case-dir work/Table5_prebalance_reset
+            python table5-prebalance/verify_prebalance.py --case-dir work/Table5_prebalance_reset
           else
             echo 'No completed Table 5 CSV; inspect prebalance and run evidence.'
           fi
