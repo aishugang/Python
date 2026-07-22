@@ -1,0 +1,64 @@
+name: Reproduce injection-seismicity Table 5
+
+on:
+  pull_request:
+    paths:
+      - 'table5-reproduction/**'
+      - '.github/workflows/reproduce-injection-table5.yml'
+  workflow_dispatch:
+
+jobs:
+  reproduce:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 360
+    steps:
+      - name: Checkout reproduction harness
+        uses: actions/checkout@v4
+
+      - name: Checkout author's first public MATLAB archive
+        uses: actions/checkout@v4
+        with:
+          repository: MohammadSabah93/XFEM-Injection-Induced-Seismicity
+          ref: 8f7b13737863100031ccd8f26e18ce92538d11a0
+          path: author
+
+      - name: Set up MATLAB R2022b
+        uses: matlab-actions/setup-matlab@v3
+        with:
+          release: R2022b
+          cache: true
+
+      - name: Prepare paper-literal 600-hour case
+        run: python table5-reproduction/prepare_case.py --author-dir author --output-dir work/Table5_case
+
+      - name: Run author model in licensed MATLAB
+        uses: matlab-actions/run-command@v3
+        with:
+          command: workspace=getenv('GITHUB_WORKSPACE'); cd(fullfile(workspace,'work','Table5_case')); run_table5_ci
+
+      - name: Compare with published Table 5
+        if: always()
+        run: |
+          if [ -f work/Table5_case/Table5_reproduced.csv ]; then
+            python table5-reproduction/verify_results.py
+          else
+            echo 'No completed Table 5 CSV; inspect run/checkpoint evidence.'
+          fi
+
+      - name: Upload complete evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: injection-table5-paper-literal
+          if-no-files-found: warn
+          retention-days: 30
+          path: |
+            work/Table5_case/Table5_reproduced.csv
+            work/Table5_case/Table5_comparison.json
+            work/Table5_case/Table5_comparison.md
+            work/Table5_case/Table5_results.mat
+            work/Table5_case/Table5_state_compact.mat
+            work/Table5_case/Table5_checkpoint.mat
+            work/Table5_case/REPRODUCTION_PATCH.txt
+            work/Table5_case/run.log
+            work/Table5_case/run_error.txt

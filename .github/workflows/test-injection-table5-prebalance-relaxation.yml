@@ -1,0 +1,70 @@
+name: Test injection-seismicity Table 5 prebalance relaxation
+
+on:
+  pull_request:
+    paths:
+      - 'table5-prebalance/**'
+      - '.github/workflows/test-injection-table5-prebalance-relaxation.yml'
+  workflow_dispatch:
+
+jobs:
+  prebalance_relaxation:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 360
+    steps:
+      - name: Checkout reproduction harness
+        uses: actions/checkout@v4
+
+      - name: Checkout author's first public MATLAB archive
+        uses: actions/checkout@v4
+        with:
+          repository: MohammadSabah93/XFEM-Injection-Induced-Seismicity
+          ref: 8f7b13737863100031ccd8f26e18ce92538d11a0
+          path: author
+
+      - name: Set up MATLAB R2022b
+        uses: matlab-actions/setup-matlab@v3
+        with:
+          release: R2022b
+          cache: true
+
+      - name: Prepare paper-literal 600-hour case
+        run: python table5-reproduction/prepare_case.py --author-dir author --output-dir work/Table5_prebalance_relaxation
+
+      - name: Apply load-ramped drained prebalance and dynamic reset
+        run: python table5-prebalance/apply_prebalance_relaxation.py --case-dir work/Table5_prebalance_relaxation
+
+      - name: Run prebalanced author model in licensed MATLAB
+        uses: matlab-actions/run-command@v3
+        with:
+          command: workspace=getenv('GITHUB_WORKSPACE'); cd(fullfile(workspace,'work','Table5_prebalance_relaxation')); run_table5_ci
+
+      - name: Compare with published Table 5
+        if: always()
+        run: |
+          if [ -f work/Table5_prebalance_relaxation/Table5_reproduced.csv ]; then
+            python table5-reproduction/verify_results.py --case-dir work/Table5_prebalance_relaxation
+          else
+            echo 'No completed Table 5 CSV; inspect prebalance and run evidence.'
+          fi
+
+      - name: Upload prebalance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: injection-table5-prebalance-relaxation
+          if-no-files-found: warn
+          retention-days: 30
+          path: |
+            work/Table5_prebalance_relaxation/Prebalance_summary.csv
+            work/Table5_prebalance_relaxation/Prebalance_state.mat
+            work/Table5_prebalance_relaxation/PREBALANCE_PATCH.txt
+            work/Table5_prebalance_relaxation/Table5_reproduced.csv
+            work/Table5_prebalance_relaxation/Table5_comparison.json
+            work/Table5_prebalance_relaxation/Table5_comparison.md
+            work/Table5_prebalance_relaxation/Table5_results.mat
+            work/Table5_prebalance_relaxation/Table5_state_compact.mat
+            work/Table5_prebalance_relaxation/Table5_checkpoint.mat
+            work/Table5_prebalance_relaxation/REPRODUCTION_PATCH.txt
+            work/Table5_prebalance_relaxation/run.log
+            work/Table5_prebalance_relaxation/run_error.txt
