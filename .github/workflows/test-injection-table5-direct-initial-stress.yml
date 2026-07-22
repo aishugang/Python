@@ -1,0 +1,79 @@
+name: Test injection-seismicity Table 5 direct initial stress
+
+on:
+  pull_request:
+    paths:
+      - 'table5-direct-initial/**'
+      - '.github/workflows/test-injection-table5-direct-initial-stress.yml'
+  workflow_dispatch:
+
+jobs:
+  direct_initial_stress:
+    name: ${{ matrix.variant }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        variant:
+          - bulk_only
+          - bulk_fault_projected
+
+    steps:
+      - name: Checkout reproduction harness
+        uses: actions/checkout@v4
+
+      - name: Checkout author's first public MATLAB archive
+        uses: actions/checkout@v4
+        with:
+          repository: MohammadSabah93/XFEM-Injection-Induced-Seismicity
+          ref: 8f7b13737863100031ccd8f26e18ce92538d11a0
+          path: author
+
+      - name: Set up MATLAB R2022b
+        uses: matlab-actions/setup-matlab@v3
+        with:
+          release: R2022b
+          cache: true
+
+      - name: Prepare paper-literal 600-hour case
+        run: python table5-reproduction/prepare_case.py --author-dir author --output-dir "work/${{ matrix.variant }}"
+
+      - name: Apply direct initial-stress state
+        run: python table5-direct-initial/apply_direct_initial_stress.py --case-dir "work/${{ matrix.variant }}" --variant "${{ matrix.variant }}"
+
+      - name: Run author model in licensed MATLAB
+        uses: matlab-actions/run-command@v3
+        with:
+          command: workspace=getenv('GITHUB_WORKSPACE'); cd(fullfile(workspace,'work','${{ matrix.variant }}')); run_table5_ci
+
+      - name: Compare with published Table 5
+        if: always()
+        run: |
+          if [ -f "work/${{ matrix.variant }}/Table5_reproduced.csv" ]; then
+            python table5-reproduction/verify_results.py --case-dir "work/${{ matrix.variant }}"
+          else
+            echo 'No completed Table 5 CSV; inspect initial-state and MATLAB evidence.'
+          fi
+
+      - name: Upload direct initial-stress evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: injection-table5-direct-initial-${{ matrix.variant }}
+          if-no-files-found: warn
+          retention-days: 30
+          path: |
+            work/${{ matrix.variant }}/DIRECT_INITIAL_VARIANT.json
+            work/${{ matrix.variant }}/DIRECT_INITIAL_PATCH.txt
+            work/${{ matrix.variant }}/DirectInitialState_summary.csv
+            work/${{ matrix.variant }}/DirectInitialState.mat
+            work/${{ matrix.variant }}/Table5_reproduced.csv
+            work/${{ matrix.variant }}/Table5_comparison.json
+            work/${{ matrix.variant }}/Table5_comparison.md
+            work/${{ matrix.variant }}/Table5_results.mat
+            work/${{ matrix.variant }}/Table5_state_compact.mat
+            work/${{ matrix.variant }}/Table5_checkpoint.mat
+            work/${{ matrix.variant }}/run.log
+            work/${{ matrix.variant }}/run_error.txt
